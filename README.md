@@ -1,2 +1,0 @@
-# CS2000
-CS200 Yale PSETS 
