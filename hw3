@@ -97,21 +97,21 @@ class gate:
 
     def good_gate(self):
         valid_type = ['and', 'or', 'xor', 'nand', 'nor', 'not']
-    
-        if self.type in valid_type and isinstance(self.type, str):
-
-            if isinstance(self.inputs, list):
-                if len(self.inputs) == 2:
+                    
+        if self.type not in valid_type and not isinstance(self.inputs, list) and not isinstance(self.output, str):
+            return False
+        else:
+            for i in self.inputs:
+                    if not isinstance(i, str):
+                        return False
+            if self.type == "not" and len(self.inputs) == 1:
+                    return True
+            else:
+                if len(self.type) == 2:
                     return True
                 else:
                     return False
-                
-            if self.type == "not":
-                if len(self.inputs) > 1:
-                    return False
-                else:
-                    return True
-
+                    
     ## the overloaded == operator for gates.
     def __eq__(self, other):
         return (type(self) == type(other) and
