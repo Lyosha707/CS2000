@@ -97,20 +97,18 @@ class gate:
 
     def good_gate(self):
         valid_type = ['and', 'or', 'xor', 'nand', 'nor', 'not']
-                    
-        if self.type not in valid_type and not isinstance(self.inputs, list) and not isinstance(self.output, str):
+
+        if self.type not in valid_type:
             return False
+        if not isinstance(self.inputs, list) or not all(isinstance(i, str) for i in self.inputs):
+            return False
+        if not isinstance(self.output, str):
+            return False
+
+        if self.type == 'not':
+            return len(self.inputs) == 1
         else:
-            for i in self.inputs:
-                    if not isinstance(i, str):
-                        return False
-            if self.type == "not" and len(self.inputs) == 1:
-                    return True
-            else:
-                if len(self.type) == 2:
-                    return True
-                else:
-                    return False
+            return len(self.inputs) == 2
                     
     ## the overloaded == operator for gates.
     def __eq__(self, other):
@@ -172,7 +170,7 @@ In addition, the circuit must satisfy the following conditions:
  the output of a gate.
 '''
 class circuit:
-    
+ 
     def __init__(self, inputs, outputs, gates):
         self.inputs = inputs
         self.outputs = outputs
@@ -182,22 +180,76 @@ class circuit:
         return f"circuit({self.inputs!r}, {self.outputs!r}, {self.gates!r})"
 
     def good_circuit(self):
-        pass
+        if not isinstance(self.inputs, list) or not all(isinstance(w, str) for w in self.inputs):
+            return False
+        if not isinstance(self.outputs, list) or not all(isinstance(w, str) for w in self.outputs):
+            return False
+        if not isinstance(self.gates, list) or not all(isinstance(g, gate) for g in self.gates):
+            return False
 
+        if len(self.gates) == 0:
+            return True
+
+        for g in self.gates:
+            if not g.good_gate():
+                return False
+
+        gate_outputs = [g.output for g in self.gates]
+        gate_inputs = [i for g in self.gates for i in g.inputs]
+
+        for w in self.inputs:
+            if w in gate_outputs:
+                return False
+
+        for w in gate_inputs:
+            if w not in self.inputs and w not in gate_outputs:
+                return False
+
+        if len(gate_outputs) != len(set(gate_outputs)):
+            return False
+
+        for w in self.outputs:
+            if w not in self.inputs and w not in gate_outputs:
+                return False
+        return True
+   
     ## See problem 3 below
     def all_wires(self):
-        pass
+        wires = []
+        for g in self.gates:
+            if g.output not in wires:
+                wires.append(g.output)
+        for g in self.gates:
+            for i in g.inputs:
+                if i not in wires:
+                    wires.append(i)
+        for i in self.inputs:
+            if i not in wires:
+                wires.append(i)
+        for o in self.outputs:
+            if o not in wires:
+                wires.append(o)
+        return wires
 
-    ## See problem 3 below
+
     def find_gate(self, wire):
-        pass
+        for g in self.gates:
+            if g.output == wire:
+                return g
+        
+        return False
 
     ## See problem xx below.  You do not have to write this one.
     def next_value(self, wire, config):
         if wire in self.inputs:
             return config[wire]
+
         wgate = self.find_gate(wire)
+        if not wgate:
+            return config[wire]  # orbiting feedback uses prior config
+
         wtype = wgate.type
+
         winputs = wgate.inputs
         input_values = list(map(lambda x: config[x], winputs))
         if wtype == 'not':
@@ -220,7 +272,7 @@ class circuit:
         if wtype == 'nand':
             if input_values[0] == 0:
                 return 1
-            else:
+        else:
                 return 1 - input_values[1]
         if wtype == 'nor':
             if input_values[0] == 0:
@@ -230,31 +282,88 @@ class circuit:
 
     ## See problem 5 below
     def next_config(self, config):
-        pass
+        new_config = {}
+        wires = self.all_wires()
+        for w in wires:
+            new_config[w] = self.next_value(w, config)
+        return dict(sorted(new_config.items()))
 
     ## See problem 6 below
     def stable(self,config):
-        pass
+        next_cfg = self.next_config(config)
+        return next_cfg == config
 
     ## See problem 6 below
     def all_stable_configs(self):
-        pass
+        
+        configs = all_configs(self.all_wires())
+        stable_list = []
+        
+        for cfg in configs:
+            if self.stable(cfg):
+                stable_list.append(cfg)
+        
+        def config_key(c):
+            return int("".join(str(c[w]) for w in self.all_wires()), 2)
+        
+        return sorted(stable_list, key=config_key)
 
     ## See problem 6 below
     def output_values(self,config):
-        pass
+        return [config[w] for w in self.outputs]
+
 
     ## See problem 6 below
     def init_config(self, input_values):
-        pass
+        wires = self.all_wires()
+        cfg = {}
+
+        for i, w in enumerate(self.inputs):
+            cfg[w] = input_values[i]
+        
+        for w in wires:
+            if w not in cfg:
+               cfg[w] = 0
+        return cfg
         
     ## See problem 7 below
     def simulate(self, config, n):
-        pass
+        wire_order = self.all_wires()
+        current = {k: config[k] for k in wire_order if k in config}
+        configs = [dict(sorted(current.items()))]
+
+        for _ in range(n):
+            next_cfg = self.next_config(current)
+            next_cfg = {k: next_cfg[k] for k in wire_order if k in next_cfg}
+
+            if None in next_cfg.values():
+                return []
+
+            configs.append(dict(sorted(next_cfg.items())))
+            
+            if next_cfg == current:
+                configs.pop()
+                break
+            
+            current = next_cfg
+        return [dict(sorted(cfg.items())) for cfg in configs]
 
     ## See problem 8 below    
     def final_config(self,config):
-        pass
+        seen = []  # to track all configurations encountered
+        current = config
+
+        while True:
+            next_cfg = self.next_config(current)
+
+            if next_cfg == current:
+               return current
+
+            if next_cfg in seen:
+                return "none"
+
+            seen.append(next_cfg)
+            current = next_cfg
 
 ### use in all_stable_configs above
 ## similar to power_set() in hw1
@@ -272,7 +381,6 @@ def all_configs_aux(wires):
     left =  [[[wires[0], 0]] + x for x in ac]
     right =  [[[wires[0], 1]] + x for x in ac]
     return left + right
-
 
 ## We provide the flatten() function which may be useful in defining the circuit methods.
 
@@ -431,9 +539,18 @@ fa_ckt.inputs => ['x', 'y', 'ci']
 fa_ckt.outputs => ['z', 'c0']
 
 '''
-ha_ckt = circuit([], [], [])
-fa_ckt = circuit([], [], [])
+ha_ckt = circuit(["x", "y"], ["z", "c0"], [
+    gate("xor", ["x", "y"], "z"),
+    gate("and", ["x", "y"], "c0")
+])
 
+fa_ckt = circuit(["x", "y", "ci"], ["z", "c0"], [
+    gate("xor", ["x", "y"], "s1"),
+    gate("xor", ["s1", "ci"], "z"),
+    gate("and", ["s1", "ci"], "a1"),
+    gate("and", ["x", "y"], "a2"),
+    gate("or", ["a1", "a2"], "c0")
+])
 
 '''
 ############################################################################
